@@ -1,3 +1,9 @@
+<!-- default file list -->
+*Files to look at*:
+
+* [MainWindow.xaml](./CS/MapControl_RouteCalculator/MainWindow.xaml) (VB: [MainWindow.xaml.vb](./VB/MapControl_RouteCalculator/MainWindow.xaml.vb))
+* [MainWindow.xaml.cs](./CS/MapControl_RouteCalculator/MainWindow.xaml.cs) (VB: [MainWindow.xaml.vb](./VB/MapControl_RouteCalculator/MainWindow.xaml.vb))
+<!-- default file list end -->
 # How to implement a route calculator
 
 
