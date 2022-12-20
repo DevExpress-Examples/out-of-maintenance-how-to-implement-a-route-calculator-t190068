@@ -1,151 +1,136 @@
-﻿Imports System.Collections.Generic
+Imports System.Collections.Generic
 Imports System.Windows
 Imports System.Windows.Input
 Imports System.Windows.Media
 Imports DevExpress.Xpf.Map
 
 Namespace MapControl_RouteCalculator
-	''' <summary>
-	''' Interaction logic for MainWindow.xaml
-	''' </summary>
-	Partial Public Class MainWindow
-		Inherits Window
 
-		Private helper As New RoutingHelper()
+    ''' <summary>
+    ''' Interaction logic for MainWindow.xaml
+    ''' </summary>
+    Public Partial Class MainWindow
+        Inherits System.Windows.Window
 
-		Public Sub New()
-			InitializeComponent()
-		End Sub
+        Private helper As MapControl_RouteCalculator.RoutingHelper = New MapControl_RouteCalculator.RoutingHelper()
 
-		#Region "#EventHandlers"
-		Private Sub LocationInformationReceived(ByVal sender As Object, ByVal e As LocationInformationReceivedEventArgs)
-			If (e.Cancelled) AndAlso (e.Result.ResultCode <> RequestResultCode.Success) Then
-				Return
-			End If
-			GenerateItems(e.Result.Locations)
-		End Sub
+        Public Sub New()
+            Me.InitializeComponent()
+        End Sub
 
-		Private Sub SearchCompleted(ByVal sender As Object, ByVal e As BingSearchCompletedEventArgs)
-			If e.Cancelled OrElse (e.RequestResult.ResultCode <> RequestResultCode.Success) Then
-				Return
-			End If
+'#Region "#EventHandlers"
+        Private Sub LocationInformationReceived(ByVal sender As Object, ByVal e As DevExpress.Xpf.Map.LocationInformationReceivedEventArgs)
+            If(e.Cancelled) AndAlso (e.Result.ResultCode <> DevExpress.Xpf.Map.RequestResultCode.Success) Then Return
+            Me.GenerateItems(e.Result.Locations)
+        End Sub
 
-			If e.RequestResult.SearchResults.Count <> 0 Then
-				GenerateItems(e.RequestResult.SearchResults)
-			Else
-				GenerateItems(New LocationInformation() { e.RequestResult.SearchRegion })
-			End If
-		End Sub
+        Private Sub SearchCompleted(ByVal sender As Object, ByVal e As DevExpress.Xpf.Map.BingSearchCompletedEventArgs)
+            If e.Cancelled OrElse (e.RequestResult.ResultCode <> DevExpress.Xpf.Map.RequestResultCode.Success) Then Return
+            If e.RequestResult.SearchResults.Count <> 0 Then
+                Me.GenerateItems(e.RequestResult.SearchResults)
+            Else
+                Me.GenerateItems(New DevExpress.Xpf.Map.LocationInformation() {e.RequestResult.SearchRegion})
+            End If
+        End Sub
 
-		Private Sub RouteCalculated(ByVal sender As Object, ByVal e As BingRouteCalculatedEventArgs)
-			If e.Cancelled Then
-				Return
-			End If
+        Private Sub RouteCalculated(ByVal sender As Object, ByVal e As DevExpress.Xpf.Map.BingRouteCalculatedEventArgs)
+            If e.Cancelled Then Return
+            If e.CalculationResult.ResultCode <> DevExpress.Xpf.Map.RequestResultCode.Success Then Return
+            Me.helper.BuildRoute(e.CalculationResult.RouteResults(CInt((0))).RoutePath)
+            Me.UpdateStorage()
+        End Sub
 
-			If e.CalculationResult.ResultCode <> RequestResultCode.Success Then
-				Return
-			End If
-			helper.BuildRoute(e.CalculationResult.RouteResults(0).RoutePath)
-			UpdateStorage()
-		End Sub
+        Private Sub GenerateItems(ByVal locations As System.Collections.Generic.IEnumerable(Of DevExpress.Xpf.Map.LocationInformation))
+            Me.UpdateStorage()
+            For Each location In locations
+                Dim pushpin As DevExpress.Xpf.Map.MapPushpin = New DevExpress.Xpf.Map.MapPushpin() With {.Location = location.Location, .Information = location}
+                AddHandler pushpin.MouseLeftButtonDown, AddressOf Me.pushpin_MouseLeftButtonDown
+                Me.storage.Items.Add(pushpin)
+            Next
+        End Sub
 
-		Private Sub GenerateItems(ByVal locations As IEnumerable(Of LocationInformation))
-			UpdateStorage()
-			For Each location In locations
-				Dim pushpin As New MapPushpin() With {
-					.Location = location.Location,
-					.Information = location
-				}
-				AddHandler pushpin.MouseLeftButtonDown, AddressOf pushpin_MouseLeftButtonDown
-				storage.Items.Add(pushpin)
-			Next location
-		End Sub
+        Private Sub UpdateStorage()
+            Me.storage.Items.Clear()
+            Me.storage.Items.Add(Me.helper.Route)
+            For Each pushpin As DevExpress.Xpf.Map.MapPushpin In Me.helper.Pushpins
+                Me.storage.Items.Add(pushpin)
+            Next
+        End Sub
 
-		Private Sub UpdateStorage()
-			storage.Items.Clear()
-			storage.Items.Add(helper.Route)
-			For Each pushpin As MapPushpin In helper.Pushpins
-				storage.Items.Add(pushpin)
-			Next pushpin
-		End Sub
+        Private Sub pushpin_MouseLeftButtonDown(ByVal sender As Object, ByVal e As System.Windows.Input.MouseButtonEventArgs)
+            Dim pushpin As DevExpress.Xpf.Map.MapPushpin = TryCast(sender, DevExpress.Xpf.Map.MapPushpin)
+            If pushpin Is Nothing Then Return
+            e.Handled = True
+            Me.helper.AddItem(pushpin)
+            Me.routeProvider.CalculateRoute(Me.helper.Waypoints)
+            RemoveHandler pushpin.MouseLeftButtonDown, AddressOf Me.pushpin_MouseLeftButtonDown
+        End Sub
 
-		Private Sub pushpin_MouseLeftButtonDown(ByVal sender As Object, ByVal e As MouseButtonEventArgs)
-			Dim pushpin As MapPushpin = TryCast(sender, MapPushpin)
-			If pushpin Is Nothing Then
-				Return
-			End If
-			e.Handled = True
-			helper.AddItem(pushpin)
-			routeProvider.CalculateRoute(helper.Waypoints)
-			RemoveHandler pushpin.MouseLeftButtonDown, AddressOf pushpin_MouseLeftButtonDown
-		End Sub
-		#End Region ' #EventHandlers
+'#End Region  ' #EventHandlers
+        Private Sub Button_Click(ByVal sender As Object, ByVal e As System.Windows.RoutedEventArgs)
+            Me.helper.Clear()
+            Me.UpdateStorage()
+        End Sub
+    End Class
 
-		Private Sub Button_Click(ByVal sender As Object, ByVal e As RoutedEventArgs)
-			helper.Clear()
-			UpdateStorage()
-		End Sub
-	End Class
+'#Region "#Helper"
+    Friend Class RoutingHelper
 
-	#Region "#Helper"
-	Friend Class RoutingHelper
-'INSTANT VB NOTE: The field pushpins was renamed since Visual Basic does not allow fields to have the same name as other class members:
-		Private pushpins_Conflict As New List(Of MapPushpin)()
-'INSTANT VB NOTE: The field route was renamed since Visual Basic does not allow fields to have the same name as other class members:
-		Private route_Conflict As New MapPolyline() With {
-			.Stroke = New SolidColorBrush(Color.FromArgb(&HFF, &H8A, &HFB, &HFF)),
-			.StrokeStyle = New StrokeStyle() With {.Thickness = 3}
-		}
-'INSTANT VB NOTE: The field waypoints was renamed since Visual Basic does not allow fields to have the same name as other class members:
-		Private waypoints_Conflict As New List(Of RouteWaypoint)()
-		Private currentLatter As Char = "A"c
+        Private pushpinsField As System.Collections.Generic.List(Of DevExpress.Xpf.Map.MapPushpin) = New System.Collections.Generic.List(Of DevExpress.Xpf.Map.MapPushpin)()
 
-		Public ReadOnly Property Pushpins() As List(Of MapPushpin)
-			Get
-				Return pushpins_Conflict
-			End Get
-		End Property
-		Public ReadOnly Property Waypoints() As List(Of RouteWaypoint)
-			Get
-				Return waypoints_Conflict
-			End Get
-		End Property
-		Public Property Route() As MapPolyline
-			Get
-				Return route_Conflict
-			End Get
-			Set(ByVal value As MapPolyline)
-				route_Conflict = value
-			End Set
-		End Property
-		Public ReadOnly Property Count() As Integer
-			Get
-				Return pushpins_Conflict.Count
-			End Get
-		End Property
+        Private routeField As DevExpress.Xpf.Map.MapPolyline = New DevExpress.Xpf.Map.MapPolyline() With {.Stroke = New System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(&HFF, &H8A, &HFB, &HFF)), .StrokeStyle = New DevExpress.Xpf.Map.StrokeStyle() With {.Thickness = 3}}
 
-		Public Sub BuildRoute(ByVal points As IEnumerable(Of GeoPoint))
-			route_Conflict.Points.Clear()
-			For Each point As GeoPoint In points
-				route_Conflict.Points.Add(point)
-			Next point
-		End Sub
+        Private waypointsField As System.Collections.Generic.List(Of DevExpress.Xpf.Map.RouteWaypoint) = New System.Collections.Generic.List(Of DevExpress.Xpf.Map.RouteWaypoint)()
 
-		Public Sub AddItem(ByVal pushpin As MapPushpin)
-			pushpins_Conflict.Add(pushpin)
-			waypoints_Conflict.Add(New RouteWaypoint(CType(pushpin.Information, LocationInformation).DisplayName, CType(pushpin.Location, GeoPoint)))
-'INSTANT VB WARNING: An assignment within expression was extracted from the following statement:
-'ORIGINAL LINE: pushpin.Text = (currentLatter++).ToString();
-			pushpin.Text = (currentLatter).ToString()
-			currentLatter = ChrW(AscW(currentLatter) + 1)
-		End Sub
+        Private currentLatter As Char = "A"c
 
-		Public Sub Clear()
-			route_Conflict.Points.Clear()
-			pushpins_Conflict.Clear()
-			waypoints_Conflict.Clear()
-			currentLatter = "A"c
-		End Sub
-	End Class
-	#End Region ' #Helper
+        Public ReadOnly Property Pushpins As List(Of DevExpress.Xpf.Map.MapPushpin)
+            Get
+                Return Me.pushpinsField
+            End Get
+        End Property
+
+        Public ReadOnly Property Waypoints As List(Of DevExpress.Xpf.Map.RouteWaypoint)
+            Get
+                Return Me.waypointsField
+            End Get
+        End Property
+
+        Public Property Route As MapPolyline
+            Get
+                Return Me.routeField
+            End Get
+
+            Set(ByVal value As MapPolyline)
+                Me.routeField = value
+            End Set
+        End Property
+
+        Public ReadOnly Property Count As Integer
+            Get
+                Return Me.pushpinsField.Count
+            End Get
+        End Property
+
+        Public Sub BuildRoute(ByVal points As System.Collections.Generic.IEnumerable(Of DevExpress.Xpf.Map.GeoPoint))
+            Me.routeField.Points.Clear()
+            For Each point As DevExpress.Xpf.Map.GeoPoint In points
+                Me.routeField.Points.Add(point)
+            Next
+        End Sub
+
+        Public Sub AddItem(ByVal pushpin As DevExpress.Xpf.Map.MapPushpin)
+            Me.pushpinsField.Add(pushpin)
+            Me.waypointsField.Add(New DevExpress.Xpf.Map.RouteWaypoint(CType(pushpin.Information, DevExpress.Xpf.Map.LocationInformation).DisplayName, CType(pushpin.Location, DevExpress.Xpf.Map.GeoPoint)))
+            pushpin.Text =(System.Math.Min(System.Threading.Interlocked.Increment(Me.currentLatter), Me.currentLatter - 1)).ToString()
+        End Sub
+
+        Public Sub Clear()
+            Me.routeField.Points.Clear()
+            Me.pushpinsField.Clear()
+            Me.waypointsField.Clear()
+            Me.currentLatter = "A"c
+        End Sub
+    End Class
+'#End Region  ' #Helper
 End Namespace
